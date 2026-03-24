@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Task Manager — MongoDB CRUD</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Fraunces:ital,wght@0,300;0,600;1,300&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0f0e0d; --surface: #1a1917; --surface2: #242320;
+    --border: #2e2c29; --border2: #3d3b37;
+    --text: #e8e4dc; --muted: #7a776f;
+    --accent: #d4a853; --accent-dim: #a07e38;
+    --red: #c0463a; --red-bg: #1f1210;
+    --green: #4a8c5c; --green-bg: #0e1a12;
+    --blue: #3d7db5; --blue-bg: #0c1620;
+    --purple: #7c5cbf; --purple-bg: #120f1e;
+    --font-display: 'Fraunces', Georgia, serif;
+    --font-mono: 'DM Mono', monospace;
+    --radius: 6px;
+  }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: var(--font-mono); min-height: 100vh; }
+  .shell { display: flex; height: 100vh; overflow: hidden; }
+  .sidebar { width: 240px; flex-shrink: 0; border-right: 1px solid var(--border); padding: 28px 0; display: flex; flex-direction: column; background: var(--surface); }
+  .logo { padding: 0 24px 28px; border-bottom: 1px solid var(--border); margin-bottom: 20px; }
+  .logo-title { font-family: var(--font-display); font-size: 22px; font-weight: 600; color: var(--accent); }
+  .logo-sub { font-size: 11px; color: var(--muted); letter-spacing: 0.08em; margin-top: 4px; }
+  .nav-label { font-size: 10px; color: var(--muted); letter-spacing: 0.12em; padding: 0 24px 8px; text-transform: uppercase; }
+  .nav-item { display: flex; align-items: center; gap: 10px; padding: 9px 24px; cursor: pointer; font-size: 13px; color: var(--muted); transition: all 0.15s; border-left: 2px solid transparent; }
+  .nav-item:hover { color: var(--text); background: var(--surface2); }
+  .nav-item.active { color: var(--accent); border-left-color: var(--accent); background: rgba(212,168,83,0.06); }
+  .nav-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+  .dot-all { background: var(--muted); } .dot-active { background: var(--green); }
+  .dot-done { background: var(--accent); } .dot-work { background: var(--blue); }
+  .dot-personal { background: var(--purple); } .dot-urgent { background: var(--red); }
+  .nav-count { margin-left: auto; font-size: 10px; background: var(--surface2); padding: 1px 6px; border-radius: 10px; border: 1px solid var(--border); }
+  .sidebar-footer { margin-top: auto; padding: 16px 24px 0; border-top: 1px solid var(--border); }
+  .db-status { display: flex; align-items: center; gap: 6px; font-size: 11px; }
+  .status-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--red); transition: background 0.3s; }
+  .status-dot.connected { background: var(--green); animation: pulse 2.5s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+  .db-label { color: var(--muted); }
+  .main { flex: 1; overflow-y: auto; padding: 32px 40px; }
+  .page-header { margin-bottom: 28px; }
+  .page-title { font-family: var(--font-display); font-size: 28px; font-weight: 300; color: var(--text); font-style: italic; }
+  .page-title span { color: var(--accent); font-style: normal; font-weight: 600; }
+  .page-sub { font-size: 12px; color: var(--muted); margin-top: 4px; }
+  .stats-row { display: flex; gap: 12px; margin-bottom: 28px; }
+  .stat-card { flex: 1; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; }
+  .stat-val { font-family: var(--font-display); font-size: 32px; font-weight: 600; line-height: 1; color: var(--accent); }
+  .stat-label { font-size: 11px; color: var(--muted); margin-top: 4px; letter-spacing: 0.06em; }
+  .add-section { margin-bottom: 28px; }
+  .add-section-label { font-size: 10px; color: var(--muted); letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 10px; }
+  .add-form { display: flex; gap: 8px; }
+  .input-wrap { flex: 1; position: relative; }
+  .input-prefix { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--muted); font-size: 13px; pointer-events: none; }
+  input[type="text"], select { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); color: var(--text); font-family: var(--font-mono); font-size: 13px; padding: 10px 12px; outline: none; transition: border-color 0.15s; width: 100%; }
+  .input-wrap input { padding-left: 28px; }
+  input:focus, select:focus { border-color: var(--accent-dim); }
+  select { cursor: pointer; }
+  .cat-select { width: 130px; flex-shrink: 0; }
+  .btn { font-family: var(--font-mono); font-size: 12px; padding: 10px 16px; border-radius: var(--radius); border: none; cursor: pointer; transition: all 0.15s; font-weight: 500; }
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .btn-add { background: var(--accent); color: #1a1510; }
+  .btn-add:not(:disabled):hover { background: #e0b863; }
+  .btn-edit { background: var(--surface2); color: var(--text); border: 1px solid var(--border2); font-size: 11px; padding: 5px 10px; }
+  .btn-edit:hover { border-color: var(--accent-dim); color: var(--accent); }
+  .btn-delete { background: var(--red-bg); color: var(--red); border: 1px solid #2e1915; font-size: 11px; padding: 5px 10px; }
+  .btn-delete:hover { border-color: var(--red); }
+  .btn-save { background: var(--green-bg); color: var(--green); border: 1px solid #162212; font-size: 11px; padding: 5px 10px; }
+  .btn-cancel { background: var(--surface2); color: var(--muted); border: 1px solid var(--border); font-size: 11px; padding: 5px 10px; }
+  .btn-seed { background: var(--surface2); color: var(--muted); border: 1px solid var(--border2); font-size: 11px; padding: 5px 10px; border-radius: var(--radius); cursor: pointer; font-family: var(--font-mono); }
+  .btn-seed:hover { color: var(--accent); border-color: var(--accent-dim); }
+  .list-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+  .list-label { font-size: 10px; color: var(--muted); letter-spacing: 0.1em; text-transform: uppercase; }
+  .list-actions { display: flex; gap: 8px; align-items: center; }
+  .count-badge { font-size: 10px; color: var(--muted); background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 1px 8px; }
+  .task-list { display: flex; flex-direction: column; gap: 6px; }
+  .task-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 16px; transition: border-color 0.15s; animation: slideIn 0.2s ease; }
+  @keyframes slideIn { from { opacity:0; transform: translateY(-6px); } to { opacity:1; transform: translateY(0); } }
+  .task-card:hover { border-color: var(--border2); }
+  .task-card.done { opacity: 0.5; }
+  .task-top { display: flex; align-items: center; gap: 12px; }
+  .check-wrap input[type="checkbox"] { width: 15px; height: 15px; accent-color: var(--accent); cursor: pointer; padding: 0; border: none; }
+  .task-body { flex: 1; min-width: 0; }
+  .task-title { font-size: 13px; font-weight: 500; }
+  .task-title.done { text-decoration: line-through; color: var(--muted); }
+  .task-meta { display: flex; align-items: center; gap: 8px; margin-top: 5px; flex-wrap: wrap; }
+  .task-actions { display: flex; gap: 6px; flex-shrink: 0; }
+  .cat-tag { font-size: 10px; font-weight: 500; padding: 2px 8px; border-radius: 3px; letter-spacing: 0.06em; text-transform: uppercase; }
+  .cat-work { background: var(--blue-bg); color: var(--blue); border: 1px solid #132031; }
+  .cat-personal { background: var(--purple-bg); color: var(--purple); border: 1px solid #1a1428; }
+  .cat-urgent { background: var(--red-bg); color: var(--red); border: 1px solid #2e1915; }
+  .cat-other { background: var(--surface2); color: var(--muted); border: 1px solid var(--border); }
+  .task-id { font-size: 10px; color: var(--border2); }
+  .task-date { font-size: 10px; color: var(--muted); }
+  .edit-form { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); display: flex; flex-direction: column; gap: 8px; }
+  .edit-row { display: flex; gap: 8px; }
+  .edit-row input { flex: 1; font-size: 12px; padding: 7px 10px; }
+  .edit-row select { font-size: 12px; padding: 7px 10px; width: 130px; flex-shrink: 0; }
+  .edit-actions { display: flex; gap: 6px; }
+  .empty { text-align: center; padding: 48px 20px; color: var(--muted); font-size: 13px; }
+  .empty-icon { font-family: var(--font-display); font-size: 32px; color: var(--border2); margin-bottom: 8px; font-style: italic; }
+  .loading { text-align: center; padding: 32px; color: var(--muted); font-size: 13px; }
+  .spinner { display: inline-block; width: 18px; height: 18px; border: 2px solid var(--border2); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.7s linear infinite; margin-right: 8px; vertical-align: middle; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .error-banner { background: var(--red-bg); border: 1px solid #3a1a16; color: var(--red); font-size: 12px; padding: 10px 16px; border-radius: var(--radius); margin-bottom: 16px; }
+  .api-log { margin-top: 36px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+  .api-log-header { padding: 10px 16px; border-bottom: 1px solid var(--border); font-size: 10px; color: var(--muted); letter-spacing: 0.1em; text-transform: uppercase; display: flex; justify-content: space-between; align-items: center; }
+  .log-clear { font-size: 10px; color: var(--muted); cursor: pointer; background: none; border: none; font-family: var(--font-mono); }
+  .log-clear:hover { color: var(--accent); }
+  .log-entries { max-height: 180px; overflow-y: auto; }
+  .log-entry { padding: 7px 16px; font-size: 11px; border-bottom: 1px solid var(--border); display: flex; gap: 10px; align-items: center; }
+  .log-entry:last-child { border-bottom: none; }
+  .log-method { font-weight: 500; min-width: 52px; }
+  .log-method.GET { color: var(--green); } .log-method.POST { color: var(--blue); }
+  .log-method.PUT { color: var(--accent); } .log-method.DELETE { color: var(--red); }
+  .log-path { color: var(--muted); flex: 1; }
+  .log-status.ok { color: var(--green); } .log-status.err { color: var(--red); }
+  .log-time { font-size: 10px; color: var(--border2); }
+  #toast { position: fixed; bottom: 24px; right: 24px; background: var(--surface2); border: 1px solid var(--border2); color: var(--text); font-size: 12px; padding: 10px 16px; border-radius: var(--radius); opacity: 0; pointer-events: none; transition: all 0.25s; transform: translateY(8px); font-family: var(--font-mono); }
+  #toast.show { opacity: 1; transform: translateY(0); }
+  .toast-method { color: var(--accent); margin-right: 6px; }
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+</style>
+</head>
+<body>
+<div class="shell">
+  <aside class="sidebar">
+    <div class="logo">
+      <div class="logo-title">Tasks</div>
+      <div class="logo-sub">MongoDB CRUD</div>
+    </div>
+    <div class="nav-label">Filter</div>
+    <div class="nav-item active" onclick="setFilter('all',this)"><span class="nav-dot dot-all"></span> All tasks <span class="nav-count" id="cnt-all">–</span></div>
+    <div class="nav-item" onclick="setFilter('active',this)"><span class="nav-dot dot-active"></span> Active <span class="nav-count" id="cnt-active">–</span></div>
+    <div class="nav-item" onclick="setFilter('done',this)"><span class="nav-dot dot-done"></span> Done <span class="nav-count" id="cnt-done">–</span></div>
+    <div style="height:16px"></div>
+    <div class="nav-label">Category</div>
+    <div class="nav-item" onclick="setFilter('work',this)"><span class="nav-dot dot-work"></span> Work <span class="nav-count" id="cnt-work">–</span></div>
+    <div class="nav-item" onclick="setFilter('personal',this)"><span class="nav-dot dot-personal"></span> Personal <span class="nav-count" id="cnt-personal">–</span></div>
+    <div class="nav-item" onclick="setFilter('urgent',this)"><span class="nav-dot dot-urgent"></span> Urgent <span class="nav-count" id="cnt-urgent">–</span></div>
+    <div class="nav-item" onclick="setFilter('other',this)"><span class="nav-dot"></span> Other <span class="nav-count" id="cnt-other">–</span></div>
+    <div class="sidebar-footer">
+      <div class="db-status">
+        <span class="status-dot" id="status-dot"></span>
+        <span class="db-label" id="db-label">Connecting...</span>
+      </div>
+      <div style="font-size:10px;color:var(--border2);margin-top:6px;">API: localhost:3001</div>
+    </div>
+  </aside>
+  <main class="main">
+    <div class="page-header">
+      <div class="page-title">Task <span>Manager</span></div>
+      <div class="page-sub">Connected to Express + MongoDB · Real persistent data</div>
+    </div>
+    <div id="error-banner" class="error-banner" style="display:none"></div>
+    <div class="stats-row">
+      <div class="stat-card"><div class="stat-val" id="s-total">–</div><div class="stat-label">TOTAL TASKS</div></div>
+      <div class="stat-card"><div class="stat-val" id="s-active" style="color:var(--green)">–</div><div class="stat-label">ACTIVE</div></div>
+      <div class="stat-card"><div class="stat-val" id="s-done" style="color:var(--muted)">–</div><div class="stat-label">DONE</div></div>
+    </div>
+    <div class="add-section">
+      <div class="add-section-label">POST /api/tasks — Create</div>
+      <div class="add-form">
+        <div class="input-wrap">
+          <span class="input-prefix">›</span>
+          <input type="text" id="new-title" placeholder="New task title..." maxlength="120" onkeydown="if(event.key==='Enter')createTask()">
+        </div>
+        <select class="cat-select" id="new-cat">
+          <option value="work">Work</option>
+          <option value="personal">Personal</option>
+          <option value="urgent">Urgent</option>
+          <option value="other">Other</option>
+        </select>
+        <button class="btn btn-add" id="btn-add" onclick="createTask()">+ Add Task</button>
+      </div>
+    </div>
+    <div class="list-header">
+      <div class="list-label">GET /api/tasks — Read</div>
+      <div class="list-actions">
+        <button class="btn-seed" onclick="seedData()">Seed sample data</button>
+        <span class="count-badge" id="visible-count">– tasks</span>
+      </div>
+    </div>
+    <div class="task-list" id="task-list">
+      <div class="loading"><span class="spinner"></span>Connecting to server...</div>
+    </div>
+    <div class="api-log">
+      <div class="api-log-header">
+        <span>API Request Log</span>
+        <button class="log-clear" onclick="clearLog()">Clear</button>
+      </div>
+      <div class="log-entries" id="log-entries"></div>
+    </div>
+  </main>
+</div>
+<div id="toast"></div>
+<script>
+const API = 'http://localhost:3001/api';
+let allTasks = [], filter = 'all', editingId = null;
+
+async function apiFetch(method, path, body) {
+  const start = Date.now();
+  try {
+    const res = await fetch(API + path, { method, headers: { 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined });
+    const data = await res.json();
+    logReq(method, path, res.status, Date.now() - start);
+    if (!res.ok) throw new Error(data.error || 'Request failed');
+    return data;
+  } catch (err) { logReq(method, path, 'ERR', Date.now() - start); throw err; }
+}
+
+async function loadTasks() {
+  try {
+    const data = await apiFetch('GET', '/tasks');
+    allTasks = data.data; hideError(); setDbStatus(true); render();
+  } catch (err) { setDbStatus(false); showError('Cannot connect to server. Make sure Express is running: npm start (' + err.message + ')'); document.getElementById('task-list').innerHTML = '<div class="empty"><div class="empty-icon">!</div>Server not reachable</div>'; }
+}
+
+async function createTask() {
+  const titleEl = document.getElementById('new-title');
+  const title = titleEl.value.trim();
+  const cat = document.getElementById('new-cat').value;
+  if (!title) { titleEl.focus(); return; }
+  try {
+    const data = await apiFetch('POST', '/tasks', { title, cat });
+    allTasks.unshift(data.data); titleEl.value = ''; toast('POST', 'Task created'); render();
+  } catch (err) { showError(err.message); }
+}
+
+async function updateTask(id) {
+  const titleEl = document.getElementById('edit-title-' + id);
+  const catEl = document.getElementById('edit-cat-' + id);
+  const title = titleEl ? titleEl.value.trim() : '';
+  if (!title) { if (titleEl) titleEl.focus(); return; }
+  try {
+    const data = await apiFetch('PUT', '/tasks/' + id, { title, cat: catEl.value });
+    const i = allTasks.findIndex(t => t._id === id);
+    if (i > -1) allTasks[i] = data.data;
+    editingId = null; toast('PUT', 'Task updated'); render();
+  } catch (err) { showError(err.message); }
+}
+
+async function deleteTask(id) {
+  try {
+    await apiFetch('DELETE', '/tasks/' + id);
+    allTasks = allTasks.filter(t => t._id !== id);
+    if (editingId === id) editingId = null;
+    toast('DELETE', 'Task removed'); render();
+  } catch (err) { showError(err.message); }
+}
+
+async function toggleDone(id) {
+  const t = allTasks.find(t => t._id === id);
+  if (!t) return;
+  try {
+    const data = await apiFetch('PUT', '/tasks/' + id, { done: !t.done });
+    const i = allTasks.findIndex(t => t._id === id);
+    if (i > -1) allTasks[i] = data.data;
+    toast('PUT', 'Status toggled'); render();
+  } catch (err) { showError(err.message); }
+}
+
+async function seedData() {
+  try { await apiFetch('POST', '/seed', {}); toast('POST', 'Sample data seeded'); await loadTasks(); }
+  catch (err) { showError(err.message); }
+}
+
+function filtered() {
+  if (filter === 'all') return allTasks;
+  if (filter === 'active') return allTasks.filter(t => !t.done);
+  if (filter === 'done') return allTasks.filter(t => t.done);
+  return allTasks.filter(t => t.cat === filter);
+}
+
+function render() {
+  const total = allTasks.length, done = allTasks.filter(t => t.done).length, active = total - done;
+  const list = filtered();
+  document.getElementById('s-total').textContent = total;
+  document.getElementById('s-active').textContent = active;
+  document.getElementById('s-done').textContent = done;
+  ['work','personal','urgent','other'].forEach(c => { document.getElementById('cnt-' + c).textContent = allTasks.filter(t => t.cat === c).length; });
+  document.getElementById('cnt-all').textContent = total;
+  document.getElementById('cnt-active').textContent = active;
+  document.getElementById('cnt-done').textContent = done;
+  document.getElementById('visible-count').textContent = list.length + ' task' + (list.length !== 1 ? 's' : '');
+  const el = document.getElementById('task-list');
+  if (!list.length) { el.innerHTML = '<div class="empty"><div class="empty-icon">0</div>No tasks here.</div>'; return; }
+  el.innerHTML = list.map(t => {
+    const isEditing = editingId === t._id;
+    return `<div class="task-card${t.done ? ' done' : ''}">
+      <div class="task-top">
+        <div class="check-wrap"><input type="checkbox" ${t.done ? 'checked' : ''} onchange="toggleDone('${t._id}')"></div>
+        <div class="task-body">
+          <div class="task-title${t.done ? ' done' : ''}">${esc(t.title)}</div>
+          <div class="task-meta">
+            <span class="cat-tag cat-${t.cat}">${t.cat}</span>
+            <span class="task-id">#${t._id.slice(-6)}</span>
+            <span class="task-date">${fmtAge(t.createdAt)}</span>
+          </div>
+        </div>
+        <div class="task-actions">
+          <button class="btn btn-edit" onclick="startEdit('${t._id}')">Edit</button>
+          <button class="btn btn-delete" onclick="deleteTask('${t._id}')">Delete</button>
+        </div>
+      </div>
+      ${isEditing ? `<div class="edit-form">
+        <div class="edit-row">
+          <input type="text" id="edit-title-${t._id}" value="${esc(t.title)}" maxlength="120" onkeydown="if(event.key==='Enter')updateTask('${t._id}')">
+          <select id="edit-cat-${t._id}">${['work','personal','urgent','other'].map(c => `<option value="${c}"${t.cat===c?' selected':''}>${c}</option>`).join('')}</select>
+        </div>
+        <div class="edit-actions">
+          <button class="btn btn-save" onclick="updateTask('${t._id}')">Save</button>
+          <button class="btn btn-cancel" onclick="cancelEdit()">Cancel</button>
+        </div>
+      </div>` : ''}
+    </div>`;
+  }).join('');
+}
+
+function startEdit(id) { editingId = id; render(); const inp = document.getElementById('edit-title-' + id); if (inp) { inp.focus(); inp.select(); } }
+function cancelEdit() { editingId = null; render(); }
+function setFilter(f, el) { filter = f; document.querySelectorAll('.nav-item').forEach(x => x.classList.remove('active')); el.classList.add('active'); render(); }
+function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function fmtAge(iso) { const d = Math.floor((Date.now()-new Date(iso))/86400000); if(d===0)return'today'; if(d===1)return'yesterday'; return d+'d ago'; }
+function showError(msg) { const el = document.getElementById('error-banner'); el.textContent = '! ' + msg; el.style.display = 'block'; }
+function hideError() { document.getElementById('error-banner').style.display = 'none'; }
+function setDbStatus(ok) { document.getElementById('status-dot').className = 'status-dot' + (ok ? ' connected' : ''); document.getElementById('db-label').innerHTML = ok ? '<span style="color:var(--green)">Connected</span> · MongoDB' : '<span style="color:var(--red)">Disconnected</span>'; }
+function toast(method, msg) { const el = document.getElementById('toast'); el.innerHTML = `<span class="toast-method">${method}</span>${msg}`; el.classList.add('show'); clearTimeout(el._t); el._t = setTimeout(() => el.classList.remove('show'), 2200); }
+function logReq(method, path, status, ms) { const ok = typeof status === 'number' && status < 400; const entry = document.createElement('div'); entry.className = 'log-entry'; entry.innerHTML = `<span class="log-method ${method}">${method}</span><span class="log-path">${path}</span><span class="log-status ${ok?'ok':'err'}">${status}</span><span class="log-time">${ms}ms · ${new Date().toLocaleTimeString()}</span>`; const c = document.getElementById('log-entries'); c.insertBefore(entry, c.firstChild); if(c.children.length>25)c.lastChild.remove(); }
+function clearLog() { document.getElementById('log-entries').innerHTML = ''; }
+
+loadTasks();
+setInterval(loadTasks, 30000);
+</script>
+</body>
+</html>
